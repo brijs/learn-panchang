@@ -1,0 +1,393 @@
+<title>Panchang with Chandra</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rozha+One&family=Hind:wght@400;500;600&display=swap">
+<style>
+/* Layout: a planetarium stage (16:9 canvas) with a player bar, then the Panchang finder below. Single committed night-sky look. */
+:root{
+  --night:#0B1026; --night-2:#141A3F; --panel:#1A2150; --line:rgba(232,184,74,.28);
+  --gold:#E8B84A; --gold-soft:#F4D891; --saffron:#F28C28; --lotus:#E86A92;
+  --ink:#EFE8D8; --muted:#A3A8CF; --dim:#6D739E;
+  --good:#5CC98A; --bad:#E2553F; --warn:#F2A33A; --gul:#8A6BD8;
+  --f-disp:"Rozha One", "Tiro Devanagari Sanskrit", Georgia, serif;
+  --f-body:"Hind", "Segoe UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+html,body{background:var(--night);color:var(--ink)}
+body{font-family:var(--f-body);font-size:16px;line-height:1.55;padding-inline:16px;padding-block:0 48px}
+.wrap{max-width:1180px;margin:0 auto}
+header.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-block:18px 12px}
+.brand{font-family:var(--f-disp);font-size:clamp(24px,3.4vw,34px);color:var(--gold);letter-spacing:.01em;margin:0}
+.brand small{font-family:var(--f-body);font-size:15px;color:var(--muted);margin-left:10px;letter-spacing:.02em}
+.jump{color:var(--gold-soft);font-size:15px;text-decoration:none;border-bottom:1px solid var(--line)}
+.jump:hover{color:var(--gold)}
+
+/* Stage */
+.stage{position:relative;border-radius:14px;overflow:hidden;background:radial-gradient(60% 70% at 78% 18%,rgba(90,70,160,.35),transparent 70%),radial-gradient(50% 60% at 12% 90%,rgba(232,106,146,.12),transparent 70%),linear-gradient(#070A1C,#0E1334 60%,#1B1F4B);box-shadow:0 0 0 1px var(--line),0 30px 80px -30px rgba(0,0,0,.8)}
+#gl{position:absolute;inset:0;width:100%;height:100%;display:block}
+#cv{position:relative;display:block;width:100%;aspect-ratio:16/9;touch-action:none;cursor:default}
+.cont{position:absolute;right:2%;bottom:3%;font:600 clamp(13px,1.6vw,17px) var(--f-body);color:var(--night);background:var(--gold);border:0;border-radius:99px;padding:.6em 1.2em;cursor:pointer;box-shadow:0 0 0 5px rgba(232,184,74,.2),0 0 30px rgba(232,184,74,.35);animation:pulse 2s ease-in-out infinite}
+/* skip + sky controls */
+.skip{position:absolute;z-index:3;top:2.5%;right:1.6%;font:600 clamp(11px,1.3vw,14px) var(--f-body);color:var(--gold-soft);background:rgba(11,16,38,.75);border:1px solid var(--line);border-radius:99px;padding:.35em .9em;cursor:pointer}
+.skip:hover{background:rgba(232,184,74,.2)}
+.skyctl{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:flex-end;background:var(--night-2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:10px}
+.skyctl .sgrp{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;min-width:0}
+.skyctl label{display:flex;flex-direction:column;gap:3px;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.skyctl label.ck{flex-direction:row;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-size:14px;color:var(--ink);padding-bottom:6px}
+.skyctl input[type=date],.skyctl input[type=time],.skyctl input[type=number],.skyctl select{font:500 14px var(--f-body);color:var(--ink);background:var(--night);border:1px solid var(--line);border-radius:8px;padding:.35em .5em}
+.skyctl input[type=date]{width:152px}
+.skyctl input[type=time]{width:128px}
+.skyctl input{font-variant-numeric:tabular-nums}
+.skyctl input[type=range]{accent-color:var(--gold);width:150px}
+.skyctl input[type=checkbox]{accent-color:var(--gold);width:16px;height:16px}
+.tb{font:600 14px var(--f-body);color:var(--gold-soft);background:var(--night);border:1px solid var(--line);border-radius:8px;padding:.4em .7em;cursor:pointer;min-width:40px}
+.tb[aria-pressed="true"]{background:var(--gold);color:var(--night);border-color:var(--gold)}
+.skyctl .sl{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);align-self:center}
+.skyctl .ttl{flex-basis:100%;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}
+#theater.on{position:fixed;inset:0;z-index:50;background:var(--night);overflow:hidden auto;scrollbar-gutter:stable both-edges;overscroll-behavior:contain;padding:12px 16px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+#theater.on>*{width:100%;max-width:none}
+#theater.on>.stage{flex:none;margin:0 auto}
+#theater.on .skyctl{margin-top:6px;padding:8px 12px}
+#theater.on .player{padding-block:6px 2px}
+.tog.fs{color:var(--gold-soft);border-color:var(--gold)}
+.credit{font-size:14px;color:var(--muted);margin:10px 0 8px}
+.credit strong{color:var(--gold-soft);font-weight:600}
+.credit a{color:var(--gold-soft);text-decoration:none;border-bottom:1px solid var(--line)}
+.credit a:hover{color:var(--gold)}
+.mcredit{margin:6px 0 0;font-size:13px}
+.intro p.icredit{font-size:12.5px;color:var(--dim)}
+.irow{display:flex;gap:6px 16px;align-items:center;justify-content:center;flex-wrap:wrap;padding-inline:12px}
+#nav{display:none!important}
+.mobnote{position:fixed;left:10px;right:10px;bottom:10px;z-index:90;background:var(--night-2);border:1px solid var(--gold);border-radius:14px;padding:12px 14px;box-shadow:0 10px 40px rgba(0,0,0,.55);display:flex;gap:10px;align-items:flex-start;color:var(--ink);font-size:14.5px;line-height:1.45}
+.mobnote[hidden]{display:none}
+.mobnote .mi{font-size:24px;line-height:1}
+.mobnote b{color:var(--gold)}
+.mbtns{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.mbtns button{font:600 14px var(--f-body);background:var(--gold);color:var(--night);border:0;border-radius:8px;padding:.5em .9em;cursor:pointer}
+.mbtns button.ghost2{background:transparent;color:var(--gold-soft);border:1px solid var(--line)}
+.hlinks{display:flex;gap:18px;flex-wrap:wrap}
+.pbtn.wide{width:auto;border-radius:99px;padding:0 14px 0 12px;display:flex;gap:7px;align-items:center;font:600 14px var(--f-body);color:var(--gold-soft);border-color:var(--gold)}
+.pbtn.wide svg{width:17px;height:17px}
+.pbtn.fsb{background:rgba(232,184,74,.12)}
+.pbtn.fsb.nudge{animation:pulse 2.4s ease-in-out infinite}
+.pbtn.fsb[aria-pressed="true"]{background:var(--night-2)}
+.fstip{display:inline-flex;align-items:center;gap:6px;font:500 clamp(12px,1.35vw,14.5px) var(--f-body);color:var(--gold-soft);background:rgba(11,16,38,.6);border:1px solid var(--line);border-radius:99px;padding:.3em .9em;cursor:pointer}
+.fstip svg{width:14px;height:14px;fill:currentColor}
+.fstip kbd{font:600 11px var(--f-body);border:1px solid var(--line);border-radius:4px;padding:0 .35em}
+.fstip:hover{background:rgba(232,184,74,.18)}
+#theater.on .fstip{display:none}
+@keyframes pulse{50%{box-shadow:0 0 0 9px rgba(232,184,74,.08),0 0 40px rgba(232,184,74,.5)}}
+.words{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding-block:8px 2px}
+.wl{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-right:4px}
+.word{font:500 14px var(--f-body);color:var(--gold-soft);background:transparent;border:1px dashed rgba(232,184,74,.5);border-radius:99px;padding:.2em .8em;cursor:pointer}
+.word span{font-family:var(--f-disp);color:var(--muted);margin-left:4px}
+.word:hover{background:rgba(232,184,74,.12)}
+.def{background:var(--night-2);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-top:8px;max-width:80ch}
+.def strong{color:var(--gold)}
+.def span{font-family:var(--f-disp);color:var(--muted);margin:0 6px}
+.say{font:500 13px var(--f-body);color:var(--gold-soft);background:none;border:1px solid var(--line);border-radius:99px;padding:.15em .7em;margin-left:8px;cursor:pointer}
+details.settings{margin-top:8px;color:var(--muted);font-size:14px}
+details.settings summary{cursor:pointer}
+.srow{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-top:10px}
+.srow select{font:500 14px var(--f-body);color:var(--ink);background:var(--night);border:1px solid var(--line);border-radius:8px;padding:.4em .5em;max-width:100%}
+.srow label{display:flex;flex-direction:column;gap:4px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;min-width:0}
+#vNote{margin:.5em 0 0;font-size:13px}
+.cc{position:absolute;left:50%;bottom:1.8%;transform:translateX(-50%);max-width:82%;text-align:center;
+  font-size:clamp(13px,1.75vw,21px);line-height:1.4;color:#fff8e6;background:rgba(8,10,30,.72);padding:.35em .9em;border-radius:8px;
+  pointer-events:none;transition:opacity .3s}
+.cc:empty{opacity:0}
+.hint{position:absolute;top:3.5%;left:50%;transform:translateX(-50%);font-size:clamp(11px,1.3vw,14px);color:var(--night);background:var(--gold-soft);padding:.3em .8em;border-radius:99px;pointer-events:none}
+.intro{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:10px;padding-bottom:2%;
+  background:linear-gradient(to top,rgba(7,10,28,.85),rgba(7,10,28,0) 55%)}
+.begin{font-family:var(--f-body);font-weight:600;font-size:clamp(15px,2vw,20px);color:var(--night);background:var(--gold);border:0;border-radius:99px;
+  padding:.7em 1.6em;cursor:pointer;box-shadow:0 0 0 6px rgba(232,184,74,.18),0 0 40px rgba(232,184,74,.35)}
+.begin:hover{background:var(--gold-soft)}
+.begin:focus-visible,.pbtn:focus-visible,.chip:focus-visible,.tog:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--saffron);outline-offset:2px}
+.intro p{margin:0;color:var(--muted);font-size:clamp(12px,1.4vw,15px)}
+
+/* Player bar */
+.player{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-block:12px 6px}
+.pbtn{width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--night-2);color:var(--gold);cursor:pointer;display:grid;place-items:center;flex:none}
+.pbtn.main{width:48px;height:48px;background:var(--gold);color:var(--night);border:0}
+.pbtn svg{width:18px;height:18px;fill:currentColor}
+.bar{flex:1 1 240px;min-width:0;display:flex;gap:3px;height:28px;align-items:center;cursor:pointer}
+.seg{height:6px;background:rgba(163,168,207,.22);border-radius:3px;position:relative;overflow:hidden}
+.seg i{position:absolute;inset:0 auto 0 0;background:var(--gold);border-radius:3px}
+.bar:hover .seg{height:9px}
+.time{font-variant-numeric:tabular-nums;color:var(--muted);font-size:14px;min-width:92px;text-align:right}
+.togs{display:flex;gap:6px;flex-wrap:wrap}
+.tog{font:500 13px var(--f-body);color:var(--muted);background:transparent;border:1px solid var(--line);border-radius:99px;padding:.3em .8em;cursor:pointer}
+.tog[aria-pressed="true"]{color:var(--night);background:var(--gold-soft);border-color:var(--gold-soft)}
+.chapters{display:flex;gap:6px;flex-wrap:wrap;padding-block:6px 4px}
+.nav{display:flex;flex-direction:column;gap:6px;padding-block:8px 4px}
+.navrow{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.navh{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);min-width:200px}
+.navh em{font-style:normal;color:var(--gold);margin-right:6px}
+.menu{position:absolute;inset:0;z-index:5;background:rgba(8,11,30,.94);backdrop-filter:blur(6px);overflow:auto;padding:clamp(12px,2.4vw,28px);display:flex;flex-direction:column}
+.menu[hidden]{display:none!important}
+.mapwrap{flex:1 1 auto;min-height:240px;position:relative;border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+.mapwrap canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.seg2{display:inline-flex;gap:4px}
+.mhead{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.mhead h2{font-family:var(--f-disp);font-weight:400;color:var(--gold);margin:0;margin-right:auto;font-size:clamp(20px,2.6vw,30px)}
+.mgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (max-width:900px){.mgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.mgrid{grid-template-columns:minmax(0,1fr)}}
+.mgrp{background:var(--night-2);border:1px solid var(--line);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.mgrp.deep{border-style:dashed}
+.mgrp h3{margin:2px 4px 4px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink);font-weight:600}
+.mgrp h3 em{font-style:normal;color:var(--gold);margin-right:4px}
+.mgrp.deep h3 em{color:var(--saffron)}
+.tile{display:grid;grid-template-columns:34px minmax(0,1fr);grid-template-rows:auto auto;column-gap:8px;text-align:left;background:transparent;border:1px solid transparent;border-radius:8px;padding:6px 8px;cursor:pointer;color:var(--ink);font:500 14px var(--f-body)}
+.tile b{grid-row:1/3;color:var(--gold);font-variant-numeric:tabular-nums;align-self:center}
+.mgrp.deep .tile b{color:var(--saffron)}
+.tile small{color:var(--muted);font-size:12.5px}
+.tile:hover,.tile:focus-visible{background:rgba(232,184,74,.12);border-color:var(--line)}
+.tile.on{background:rgba(232,184,74,.2);border-color:var(--gold)}
+.keys{color:var(--muted);font-size:13px;margin:14px 0 0}
+kbd{font:600 12px var(--f-body);background:var(--night);border:1px solid var(--line);border-radius:4px;padding:1px 6px;margin:0 2px;color:var(--ink)}
+.ibtns{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.begin.alt{background:transparent;color:var(--gold-soft);box-shadow:none;border:1px solid var(--gold)}
+.pbtn.menu-btn{color:var(--gold-soft)}
+.chip{font:500 13px var(--f-body);color:var(--ink);background:var(--night-2);border:1px solid var(--line);border-radius:8px;padding:.35em .7em;cursor:pointer}
+.chip b{color:var(--gold);font-weight:600;margin-right:6px;font-variant-numeric:tabular-nums}
+.chip.on{border-color:var(--gold);background:var(--panel)}
+.chip.opt{border-style:dashed}
+.chip.opt b{color:var(--saffron)}
+.chapters.deep{align-items:center}
+.sig.birth p.syl strong{font-family:var(--f-disp);font-size:22px;color:var(--saffron);font-weight:400}
+.sig.birth p.syl span{font-family:var(--f-disp);font-size:20px;color:var(--gold-soft);margin-left:4px}
+
+/* Finder */
+#finder{margin:0 auto;padding:0}
+.finderpane{position:fixed;inset:0;z-index:60;background:rgba(8,11,30,.992);overflow:auto;padding:clamp(14px,3vw,36px)}
+.finderpane[hidden]{display:none!important}
+.finderpane>*{max-width:1180px;margin-inline:auto}
+.fphead{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+.fphead h2{font-family:var(--f-disp);font-weight:400;font-size:clamp(26px,3.6vw,40px);color:var(--gold);margin:0}
+.fpsub{color:var(--muted);font-size:14px;margin-right:auto}
+.pbtn.fnd{color:var(--night);background:var(--gold-soft);border-color:var(--gold-soft)}
+.tog.fnd2{color:var(--night);background:var(--gold);border-color:var(--gold);font-weight:600}
+button.jump{background:none;border:0;border-bottom:1px solid var(--line);cursor:pointer;font:500 15px var(--f-body);padding:0}
+#finder h2{font-family:var(--f-disp);font-weight:400;font-size:clamp(28px,4vw,44px);color:var(--gold);margin:0 0 4px;text-wrap:balance;line-height:1.15}
+#finder .lede{color:var(--muted);max-width:62ch;margin:0 0 22px}
+form.pf{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;background:var(--night-2);border:1px solid var(--line);border-radius:12px;padding:16px}
+.fld{display:flex;flex-direction:column;gap:4px;min-width:0}
+.fld label{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.fld input,.fld select{font:500 16px var(--f-body);color:var(--ink);background:var(--night);border:1px solid var(--line);border-radius:8px;padding:.45em .6em;min-width:0}
+.fld.sm input{width:110px}
+.go{font:600 16px var(--f-body);background:var(--gold);color:var(--night);border:0;border-radius:8px;padding:.6em 1.2em;cursor:pointer}
+.go:hover{background:var(--gold-soft)}
+.ghost{font:500 14px var(--f-body);background:none;color:var(--gold-soft);border:1px solid var(--line);border-radius:8px;padding:.55em 1em;cursor:pointer}
+details.adv{flex-basis:100%}
+details.adv summary{cursor:pointer;color:var(--muted);font-size:14px}
+details.adv .row{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px}
+.err{color:#ff9c7a;flex-basis:100%;margin:0;font-size:14px}
+
+.res{margin-top:22px;display:grid;grid-template-columns:minmax(0,280px) minmax(0,1fr);gap:22px}
+@media (max-width:1000px){.limbs{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:760px){.res{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:480px){.limbs{grid-template-columns:minmax(0,1fr)}}
+.moonbox{background:var(--night-2);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center}
+#mc{width:200px;height:200px;max-width:100%}
+.moonbox .big{font-family:var(--f-disp);font-size:26px;color:var(--gold);line-height:1.15}
+.moonbox .sub{color:var(--muted);font-size:14px}
+.limbs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;min-width:0}
+.limb{background:var(--night-2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0}
+.limb .k{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);display:flex;justify-content:space-between;gap:8px}
+.limb .k span:last-child{font-family:var(--f-disp);letter-spacing:0;text-transform:none;font-size:15px;color:var(--dim)}
+.limb .v{font-family:var(--f-disp);font-size:24px;color:var(--ink);line-height:1.2;margin-top:4px}
+.limb .n{font-size:13.5px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
+.limb.five{border-color:rgba(232,184,74,.55)}
+.limb.five .v{color:var(--gold-soft)}
+.note{font-size:13.5px;color:var(--muted);max-width:75ch;margin-top:18px}
+.note strong{color:var(--ink);font-weight:500}
+footer{margin-top:44px;color:var(--dim);font-size:13px}
+[hidden]{display:none!important}
+/* significance */
+.sigwrap{margin-top:34px}
+.sigwrap h3{font-family:var(--f-disp);font-weight:400;font-size:clamp(24px,3vw,32px);color:var(--gold);margin:0}
+.lede2{color:var(--muted);max-width:75ch;margin:4px 0 16px;font-size:14.5px}
+.glance{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:12px}
+.glance>div{background:rgba(92,201,138,.08);border:1px solid rgba(92,201,138,.35);border-radius:12px;padding:12px 16px;min-width:0}
+.glance>div.av{background:rgba(226,85,63,.08);border-color:rgba(226,85,63,.4)}
+.glance h4,.sig h4{margin:0 0 6px;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.glance ul{margin:0;padding-left:18px}
+.glance li{margin:2px 0}
+.sigs{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}
+.sigs>.sig{grid-column:span 2}
+.sigs>.sig:nth-child(4),.sigs>.sig:nth-child(5){grid-column:span 3}
+.sig{background:var(--night-2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0}
+.sig h4 span{font-family:var(--f-disp);text-transform:none;letter-spacing:0;color:var(--dim);margin-left:6px;font-weight:400}
+.sig p{margin:0 0 8px;font-size:14.5px}
+.sig strong{color:var(--gold-soft);font-weight:600}
+.tag{display:inline-block;font-size:12.5px;font-weight:600;padding:.15em .7em;border-radius:99px;background:rgba(163,168,207,.18)}
+.tag.ok{background:rgba(92,201,138,.2);color:#9FE3B9}
+.tag.no{background:rgba(226,85,63,.22);color:#FFB4A6}
+.sigs>.sig.day,.sigs>.sig.birth{grid-column:1/-1}
+.daybar{position:relative;height:22px;border-radius:6px;background:linear-gradient(90deg,rgba(247,166,50,.25),rgba(247,166,50,.12));margin:8px 0 4px;overflow:hidden}
+.daybar i{position:absolute;top:0;bottom:0;border-radius:4px;opacity:.9}
+.daybar b{position:absolute;top:-2px;bottom:-2px;width:3px;background:#fff;border-radius:2px}
+.dayends{display:flex;justify-content:space-between;font-size:13px;color:var(--muted)}
+ul.tl{list-style:none;margin:10px 0 0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 18px}
+ul.tl li{font-size:14.5px;font-variant-numeric:tabular-nums;min-width:0}
+ul.tl em{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px}
+ul.tl span{display:block;color:var(--muted);font-size:13px;margin-left:16px}
+@media (max-width:900px){.sigs{grid-template-columns:repeat(2,minmax(0,1fr))}.sigs>.sig,.sigs>.sig:nth-child(4),.sigs>.sig:nth-child(5){grid-column:auto}}
+@media (max-width:560px){.sigs,.glance,ul.tl{grid-template-columns:minmax(0,1fr)}}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+/* ---- phones ---- */
+@media (max-width:700px){
+  body{padding-inline:10px;padding-bottom:24px;font-size:15px}
+  header.top{padding-block:12px 8px;align-items:center}
+  .brand{font-size:24px}
+  .brand small{display:none}
+  .hlinks{gap:14px}
+  .jump{font-size:14px}
+  .stage{border-radius:10px}
+  .intro{gap:6px;padding-bottom:3%;background:linear-gradient(to top,rgba(7,10,28,.9),rgba(7,10,28,0) 70%)}
+  .intro p{display:none}
+  .ibtns{gap:6px}
+  .begin{font-size:13px;padding:.5em .95em;box-shadow:0 0 0 3px rgba(232,184,74,.18)}
+  .dt{display:none}
+  .fstip,#introMenu{display:none}
+  .skip{font-size:11px;padding:.25em .7em}
+  .cc{font-size:12.5px;max-width:96%;bottom:1%;padding:.25em .6em}
+  .hint{font-size:11px;white-space:nowrap}
+  .player{gap:8px;padding-block:10px 4px}
+  .pbtn{width:44px;height:44px}
+  .pbtn.main{width:50px;height:50px}
+  .pbtn.wide{padding:0 12px;font-size:13.5px}
+  .bar{order:10;flex:1 1 100%;height:30px}
+  .time{order:11;min-width:0;font-size:13px;margin-left:auto}
+  .togs{order:12;flex-wrap:nowrap;overflow-x:auto;width:100%;padding-bottom:4px;scrollbar-width:none}
+  .togs::-webkit-scrollbar{display:none}
+  .tog{flex:none;padding:.4em .9em;font-size:13.5px}
+  .stage .menu{position:fixed;inset:0;z-index:70;border-radius:0}
+  .mhead{gap:8px}
+  .mhead .tb{padding:.45em .7em}
+  .keys{display:none}
+  .skyctl{gap:10px 12px;padding:10px}
+  .skyctl input[type=date]{width:140px}
+  .skyctl input[type=time]{width:116px}
+  .words{padding-block:10px 2px}
+  .def{font-size:14.5px}
+  footer{font-size:13px}
+}
+@media (pointer:coarse){#cv{touch-action:pan-y}#theater.on #cv{touch-action:none}}
+html.phone #theater.on{padding:6px 8px;justify-content:flex-start}
+#theater.on{justify-content:safe center}
+</style>
+
+<div class="wrap">
+<div class="mobnote" id="mobNote" hidden role="note"><span class="mi">📱</span><div class="mt"><b>On a phone?</b> Today’s Panchang works great here. For the 3D tour, turn your phone sideways and tap <b>Full screen</b>. For the full experience, open it on a computer.<div class="mbtns"><button type="button" id="mobFind">Today’s Panchang</button><button type="button" id="mobOk" class="ghost2">Got it</button></div></div></div>
+<script>(function(){try{var m=/Mobi|Android|iPhone|iPod/i.test(navigator.userAgent)||(matchMedia('(pointer:coarse)').matches&&Math.min(screen.width,screen.height)<700);if(m)document.documentElement.classList.add('phone');var seen=false;try{seen=sessionStorage.getItem('mobNote')==='1'}catch(e){}if(m&&!seen){var n=document.getElementById('mobNote');n.hidden=false;var done=function(){n.hidden=true;try{sessionStorage.setItem('mobNote','1')}catch(e){}};document.getElementById('mobOk').onclick=done;document.getElementById('mobFind').onclick=function(){done();document.getElementById('finderTop').click();};}}catch(e){}})();</script>
+  <header class="top">
+    <h1 class="brand">Panchang <small>पञ्चाङ्ग · a guided tour with Chandra</small></h1>
+    <span class="hlinks"><button class="jump" id="sectionsTop" type="button">Sections map</button><button class="jump" id="finderTop" type="button">Today’s Panchang ›</button></span>
+  </header>
+
+  <div id="theater">
+  <div class="stage" id="stage">
+    <canvas id="gl" aria-hidden="true"></canvas>
+    <canvas id="cv" aria-label="Animated explainer of the Hindu calendar"></canvas>
+    <div class="cc" id="cc" aria-live="polite"></div>
+    <div class="hint" id="hint" hidden>Paused while you explore · press ▶ to continue</div>
+    <button class="skip" id="skip" type="button">Skip to explore ›</button>
+    <div class="menu" id="menu" hidden role="dialog" aria-label="All sections">
+      <div class="mhead"><h2>All sections</h2><span class="seg2" role="group" aria-label="View"><button class="tb" id="mvMap" type="button" aria-pressed="true">Map</button><button class="tb" id="mvList" type="button" aria-pressed="false">List</button></span><button class="tb" id="menuFinder" type="button">Today’s Panchang</button><button class="tb" id="menuClose" type="button" aria-label="Close">Close ✕</button></div>
+      <div class="mapwrap" id="mapWrap"><canvas id="mapcv" aria-label="Map of all sections. Use the List view for a text menu."></canvas></div>
+      <div class="mgrid" id="menuGrid"></div>
+      <p class="keys"><kbd>M</kbd> sections · <kbd>←</kbd><kbd>→</kbd> or <kbd>P</kbd><kbd>N</kbd> previous / next · <kbd>Space</kbd> play / pause · <kbd>S</kbd> skip to explore · <kbd>T</kbd> today’s Panchang · <kbd>F</kbd> full screen · <kbd>Esc</kbd> close</p>
+      <p class="credit mcredit">Created by <strong>Brijesh Shetty</strong> · <a href="https://github.com/brijs" target="_blank" rel="noopener">github.com/brijs</a></p>
+    </div>
+    <button class="cont" id="cont" hidden>Continue ▶</button>
+    <div class="intro" id="intro">
+      <div class="ibtns"><button class="begin" id="begin">▶ Begin<span class="dt"> the journey</span></button><button class="begin alt" id="introMenu" type="button">Sections map</button><button class="begin alt" id="introFinder" type="button">Today’s Panchang</button></div>
+      <div class="irow"><p>About 7 minutes · 13 short chapters · pauses so you can explore</p><button class="fstip" id="introFs" type="button"><svg viewBox="0 0 24 24"><path d="M3 3h7v2H5v5H3zm11 0h7v7h-2V5h-5zM3 14h2v5h5v2H3zm16 0h2v7h-7v-2h5z"/></svg> Best in full screen · press <kbd>F</kbd></button><p class="icredit">by Brijesh Shetty</p></div>
+    </div>
+  </div>
+
+  <div class="player" role="group" aria-label="Player controls">
+    <button class="pbtn wide menu-btn" id="menuBtn" aria-label="Sections map (M)" aria-expanded="false" title="Sections map (M)"><svg viewBox="0 0 24 24"><path d="M9 3 3 5.5v15.5l6-2.5 6 2.5 6-2.5V3l-6 2.5zm0 2.2 6 2.5v11.1l-6-2.5z"/></svg><span>Sections</span></button>
+    <button class="pbtn fnd" id="finderBtn" aria-label="Panchang finder (T)" title="Panchang finder (T)"><svg viewBox="0 0 24 24"><path d="M7 2h2v2h6V2h2v2h3v18H4V4h3zm-1 7v11h12V9zm2 2h3v3H8z"/></svg></button>
+    <button class="pbtn" id="prev" aria-label="Previous scene"><svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9 12z"/></svg></button>
+    <button class="pbtn main" id="play" aria-label="Play"><svg viewBox="0 0 24 24" id="playIcon"><path d="M7 4l13 8-13 8z"/></svg></button>
+    <button class="pbtn" id="next" aria-label="Next scene"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5l11 7-11 7z"/></svg></button>
+    <div class="bar" id="bar" aria-label="Scene progress"></div>
+    <div class="time" id="time">0:00 / 0:00</div>
+    <button class="pbtn wide fsb" id="fsBtn" aria-pressed="false" title="Full screen (F)"><svg viewBox="0 0 24 24"><path d="M3 3h7v2H5v5H3zm11 0h7v7h-2V5h-5zM3 14h2v5h5v2H3zm16 0h2v7h-7v-2h5z"/></svg><span id="fsLbl">Full screen</span></button>
+    <div class="togs">
+      <button class="tog" id="tVoice" aria-pressed="true">Voice</button>
+      <button class="tog" id="tTabla" aria-pressed="true" title="Keherwa theka on synthesized tabla">Tabla</button>
+      <button class="tog" id="tSfx" aria-pressed="true">Sound FX</button>
+      <button class="tog" id="tCC" aria-pressed="true">Captions</button>
+      <button class="tog" id="tAuto" aria-pressed="false">Auto-continue</button>
+      <button class="tog fnd2" id="finderPill" type="button">Today’s Panchang</button>
+    </div>
+  </div>
+  <div class="skyctl" id="skyctl" hidden>
+    <div class="ttl">Sky controls</div>
+    <div class="sgrp"><label for="skPlace">Place<select id="skPlace"></select></label><span id="skCustom" hidden class="sgrp"><label for="skLat">Lat<input type="number" id="skLat" step="0.01" style="width:84px"></label><label for="skLon">Lon<input type="number" id="skLon" step="0.01" style="width:90px"></label><label for="skTz">UTC ±h<input type="number" id="skTz" step="0.25" style="width:70px"></label></span></div>
+    <div class="sgrp"><label for="skDate">Date<input type="date" id="skDate" min="1900-01-01" max="2099-12-31"></label><label for="skTime">Time<input type="time" id="skTime"></label><button class="tb" id="skNow" type="button">Now</button></div>
+    <div class="sgrp" role="group" aria-label="Animate time"><button class="tb" id="skStepB" type="button" aria-label="Step back">‹ Step</button><button class="tb" id="skPlayB" type="button" aria-label="Play backwards">◀ Back</button><button class="tb" id="skPlayF" type="button" aria-label="Play forwards" style="min-width:96px">Play ▶</button><button class="tb" id="skStepF" type="button" aria-label="Step forward">Step ›</button>
+      <label for="skSpeed">Speed<select id="skSpeed"><option value="0.0000115741">Real time</option><option value="0.000694">1 min / s</option><option value="0.041667" selected>1 hour / s</option><option value="0.25">6 hours / s</option><option value="1">1 day / s</option><option value="7">1 week / s</option><option value="30">1 month / s</option></select></label></div>
+    <div class="sgrp" data-for="sphere local nodes"><label for="skBright">Sphere brightness<input type="range" id="skBright" min="0" max="100" value="0"></label></div>
+    <div class="sgrp" data-for="sphere local"><label class="ck"><input type="checkbox" id="skGraha" checked> All nine grahas</label><label class="ck"><input type="checkbox" id="skTrail"> Trails</label></div>
+    <div class="sgrp" data-for="sphere local" role="group" aria-label="Shade the zodiac"><span class="sl">Shade</span><button class="tb" id="sh_none" type="button" aria-pressed="false">None</button><button class="tb" id="sh_rashi" type="button" aria-pressed="true">12 rashis</button><button class="tb" id="sh_nak" type="button" aria-pressed="false">27 nakshatras</button><label class="ck"><input type="checkbox" id="skBelt" checked> Zodiac belt only (±9°)</label></div>
+    <div class="sgrp" data-for="sphere local" role="group" aria-label="View"><button class="tb" id="skOut" type="button" aria-pressed="true"><span id="skLabelOut">Outside view</span></button><button class="tb" id="skEarth" type="button" aria-pressed="false"><span id="skLabelIn">From Earth</span></button></div>
+    <div class="sgrp" data-for="sphere local nodes"><button class="tb" id="skCenter" type="button">Centre on Earth</button><button class="tb" id="skReset" type="button">Reset view</button></div>
+  </div>
+  <div class="words" aria-label="Words in this chapter"><span class="wl">Words in this chapter</span><span id="wordChips" style="display:contents"></span></div>
+  <div class="def" id="def" hidden></div>
+  <div class="finderpane" id="finderPane" hidden role="dialog" aria-label="Panchang finder">
+    <div class="fphead"><h2>Panchang for any day</h2><span class="fpsub">Tithi, vara, nakshatra, yoga, karana · what the day means · Rahu Kalam</span><button class="tb" id="finderClose" type="button">Close ✕</button></div>
+  <section id="finder">
+    <p class="lede">Pick a date, a time and a place. Chandra works out the five limbs from the real positions of the Sun and Moon, using the sidereal zodiac with the Lahiri ayanamsa, the standard in Indian almanacs.</p>
+    <form class="pf" id="pf" novalidate>
+      <div class="fld"><label for="fDate">Date</label><input type="date" id="fDate" min="1900-01-01" max="2099-12-31"></div>
+      <div class="fld"><label for="fTime">Time</label><input type="time" id="fTime"></div>
+      <div class="fld"><label for="fCity">Place</label><select id="fCity"></select></div>
+      <button class="go" type="submit">Show Panchang</button>
+      <button class="ghost" type="button" id="fNow">Right now</button>
+      <details class="adv" id="adv"><summary>Custom location</summary>
+        <div class="row">
+          <div class="fld sm"><label for="fLat">Latitude</label><input id="fLat" type="number" step="0.0001" min="-66" max="66"></div>
+          <div class="fld sm"><label for="fLon">Longitude</label><input id="fLon" type="number" step="0.0001" min="-180" max="180"></div>
+          <div class="fld sm"><label for="fTz">UTC offset (h)</label><input id="fTz" type="number" step="0.25" min="-12" max="14"></div>
+        </div>
+      </details>
+      <p class="err" id="fErr" hidden></p>
+    </form>
+    <div class="res" id="res"></div>
+    <section class="sigwrap" id="sig" aria-label="What the day means"></section>
+    <p class="note" id="fNote"></p>
+    <p class="credit">Created by <strong>Brijesh Shetty</strong> · <a href="https://github.com/brijs" target="_blank" rel="noopener">github.com/brijs</a></p>
+  </section>
+  </div>
+  </div>
+  <nav class="nav" id="nav" aria-label="Sections" hidden></nav>
+  <details class="settings"><summary>Voice settings</summary>
+    <div class="srow">
+      <label for="vSrc">Narrator<select id="vSrc"><option value="rec">Recorded natural voice</option><option value="tts">Browser voices</option></select></label>
+      <label for="vEn">English voice<select id="vEn"></select></label>
+      <label for="vHi">Voice for Sanskrit words<select id="vHi"></select></label>
+      <button class="ghost" type="button" id="vTest">Test voices</button>
+    </div>
+    <p id="vNote"></p>
+  </details>
+
+
+  <footer><p class="credit">Created by <strong>Brijesh Shetty</strong> · <a href="https://github.com/brijs" target="_blank" rel="noopener">github.com/brijs</a></p>Everything on this page, including the 3D art, tabla, sounds and calculations, is generated in code. Narration is pre-recorded with Microsoft neural voices (Indian English, with a Hindi voice for Sanskrit words). Traditional associations are shared as cultural context.</footer>
+</div>
+
+<!--THREE-->
+<script>
+/*ASTRO*/
+</script>
+<script>
+(() => {
+'use strict';
+/*APP*/
+})();
+</script>
